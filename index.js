@@ -1,4 +1,6 @@
-function basicEval(board) {}
+function basicEval(board) {
+  return [whiteBasicEval, blackBasicEval]
+}
 
 function evaluate(board, turn, options) {
   if (isForcingMove && options.calculateForcing) {
