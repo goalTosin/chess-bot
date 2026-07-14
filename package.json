@@ -1,0 +1,12 @@
+{
+  "name": "chess_bot",
+  "version": "1.0.0",
+  "description": "Idea flaws . Perpetual forcing moves",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
