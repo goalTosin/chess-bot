@@ -84,12 +84,12 @@ function isValidMove(
     if (board[f].toLowerCase() === "p") {
       // pawn push
       if (
-        ((tr === fr + 1 * [-1, 1][turn] && fc === tc) ||
+        (tr === fr + 1 * [-1, 1][turn] ||
           (tr === fr + 2 * [-1, 1][turn] &&
-            fc === tc &&
             fr === [6, 1][turn] &&
-            board[index(tr + 1 * [1, -1][turn], fc)].trim() === "")) &&
-        (board[t].trim() === "" || !!raw)
+            board[index(fr + 1 * [-1, 1][turn], fc)].trim() === "")) &&
+        (board[t].trim() === "" || !!raw) &&
+        fc === tc
       ) {
         // debugger;
         return true;
@@ -107,10 +107,12 @@ function isValidMove(
       if (
         enpassant &&
         tr === fr + 1 * [-1, 1][turn] &&
-        tc === ec &&
+        Math.abs(tc - fc) === 1 &&
         Math.abs(fc - ec) === 1 &&
-        er === fr &&
-        board[enpassant].trim() !== ""
+        fr === er &&
+        tc === ec &&
+        board[enpassant].toLowerCase() === "p" &&
+        pieceIsColor(board[enpassant], 1 - turn)
       ) {
         return tr;
       }
@@ -129,7 +131,7 @@ function isValidMove(
       );
     }
     if (board[f].toLowerCase() === "r") {
-      debugger;
+      // debugger;
       return (
         (tr === fr || tc === fc) &&
         !isBlockedVertically(fr, fc, tr, tc, board) &&
@@ -148,10 +150,9 @@ function isValidMove(
     if (board[f].toLowerCase() === "k") {
       const kmc = index([7, 0][turn], (tc + fc) / 2);
       return (
+        (Math.abs(tr - fr) < 2 && Math.abs(tc - fc) < 2) ||
         ((castled == null || castled[turn] !== 0) &&
-          Math.abs(tr - fr) < 2 &&
-          Math.abs(tc - fc) < 2) ||
-        ((tc === 2 || tc === 6) &&
+          (tc === 2 || tc === 6) &&
           fr === tr &&
           fr === [7, 0][turn] &&
           fc === 4 &&
@@ -163,8 +164,8 @@ function isValidMove(
           ) &&
           board[index([7, 0][turn], ((tc - 2) * 7) / 4)] ===
             "r"[["toUpperCase", "toLowerCase"][turn]]() &&
-          ((tc === 2 && castled[turn] !== 1) ||
-            (tc === 6 && castled[turn] !== 2)) &&
+          ((tc === 2 && (castled == null || castled[turn] !== 1)) ||
+            (tc === 6 && (castled == null || castled[turn] !== 2))) &&
           !isCheck(board, turn))
       );
     }
@@ -233,7 +234,10 @@ function getMoveNotation(
   const ms = () => {
     if (board[f].toLowerCase() === "p") {
       //promotion
-      if (promotion) {
+      if (
+        typeof promotion === "string" &&
+        "qrbn".includes(promotion.toLowerCase())
+      ) {
         if (fc !== tc) {
           return (
             "abcdefgh"[fc] +
@@ -264,40 +268,33 @@ function getMoveNotation(
     //     isValidMove()
     //   }
     // }
-    let disambiguation = toChessNotation(f);
-    const di = board
-      .map((p, i) => {
-        if (
-          getPiecePos(i)[0] === fr &&
-          i !== f &&
-          p.toLowerCase() === board[f].toLowerCase() &&
-          pieceIsColor(p, turn)
-        ) {
-          return isValidMove(i, t, board, turn, enpassant) ? i : false;
+    let fn = toChessNotation(f);
+    let disambiguation = [];
+    let n = false;
+    for (let i = 0; i < board.length; i++) {
+      const p = board[i];
+      if (
+        p.toLowerCase() === board[f].toLowerCase() &&
+        pieceIsColor(p, turn) &&
+        isValidMove(i, t, board, turn) &&
+        i !== f
+      ) {
+        let [r, c] = getPiecePos(i);
+        if (r === fr) {
+          disambiguation[0] = fn[0];
+        } else if (c === fc) {
+          disambiguation[1] = fn[1];
         }
-        return false;
-      })
-      .filter((p) => p !== false);
-    if (di.length === 0) {
-      disambiguation = disambiguation[0];
+        n = true;
+        // console.log(toChessNotation(i));
+      }
     }
-    if (
-      !board.some((p, i) => {
-        if (
-          !di.includes(i) &&
-          i !== f &&
-          p.toLowerCase() === board[f].toLowerCase() &&
-          pieceIsColor(p, turn)
-        ) {
-          return isValidMove(i, t, board, turn, enpassant);
-        }
-      })
-    ) {
-      disambiguation = "";
+    if (n && disambiguation.length === 0) {
+      disambiguation[0] = fn[0];
     }
     return (
       board[f].toUpperCase() +
-      disambiguation +
+      disambiguation.join("") +
       (board[t].trim() !== "" ? "x" : "") +
       toChessNotation(t)
     );
@@ -313,7 +310,7 @@ function getMoveNotation(
 }
 
 function pieceIsColor(p, t) {
-  return "pnbrqk".includes(p) * 1 === t && "pnbrqk".includes(p.toLowerCase());
+  return "pnbrqk".includes(p.toLowerCase()) && "pnbrqk".includes(p) * 1 === t;
 }
 function move(f, t, board, promote, remove) {
   board = [...board];
@@ -328,14 +325,18 @@ function playChessNotation(
   n,
   turn,
   board,
-  isValidMove = (f, t, board, turn, enpassant, castled) => true,
-  enpassant,
-  castled = [3, 3],
-  moves,
-  updateData = (enpassantI, castle) => {},
-  validate = false,
-  updateGameState = (outcome, reason) => {}
+  {
+    isValidMove = (f, t, board, turn, enpassant, castled) => true,
+    enpassant,
+    castled = [3, 3],
+    moves,
+    updateData = (enpassantI, castle) => {},
+    validate = false,
+    updateGameState = (outcome, reason) => {},
+    returnMove = false,
+  } = {}
 ) {
+  // debugger;
   board = [...board];
   n = n.trim().replace(/#|\+/, "");
   if (
@@ -349,6 +350,10 @@ function playChessNotation(
     if (isCheckMate(board, 1 - turn, enpassant)) {
       // console.log("is shakmaite");
       updateGameState(turn, "checkmate");
+    } else if (hasNoMoves(board, 1 - turn, enpassant)) {
+      updateGameState(0.5, "stalemate");
+    } else if (isDrawByInsufficientMaterial(board)) {
+      updateGameState(0.5, "insufficient checkmating material");
     }
   };
 
@@ -361,7 +366,7 @@ function playChessNotation(
         n === "0-0" ||
         n === "0-0-0"
       ) {
-        const side = n.toLowerCase().length === 3 ? 0 : 1;
+        const side = n.length === 3 ? 0 : 1;
         let kf = index([7, 0][turn], 4);
         let kt = index([7, 0][turn], [6, 2][side]);
         let rf = index([7, 0][turn], [7, 0][side]);
@@ -381,7 +386,7 @@ function playChessNotation(
         c[1 - turn] = null;
 
         updateData(null, c);
-        return board;
+        return { board, move: n.length === 3 ? "O-O" : "O-O-O" };
       } else {
         return null;
       }
@@ -400,14 +405,17 @@ function playChessNotation(
       if (!"abcdefgh".includes(n[0])) {
         return null;
       }
+      // debugger;
+
       //promotion, loading
       // eg g1=Q,bxc5=R
       if (n.includes("=")) {
         const pt = fromChessNotation(
-          n.substring(0, n.indexOf("=")).substring(0, 2)
+          n.length === 4 ? n[0] + n[1] : n[2] + n[3]
         );
-        console.log(toChessNotation(pt));
-        if ("81"[turn] !== n[1]) {
+        // console.log(toChessNotation(pt));
+        if ("81"[turn] !== n[n.length === 4 ? 1 : 3]) {
+          // console.log('here');
           return false;
         } else {
           let pf = null;
@@ -417,19 +425,35 @@ function playChessNotation(
             pf = fromChessNotation(n[0] + (parseInt(n[1]) - [1, -1][turn]));
             // console.log(toChessNotation(pf), n[0] +(parseInt(n[1])-1));
           }
-          if (pf == null || !isValidMove(pf, pt, board, turn)) {
+          // debugger;
+
+          if (pf == null || !isValidMove(pf, pt, board, turn)||board[pf].toLowerCase() !== 'p') {
             return false;
           }
+
           if (validate) {
             return true;
           }
 
-          return move(
-            pf,
-            pt,
-            board,
-            n[n.length - 1][["toUpperCase", "toLowerCase"][turn]]()
-          );
+          return {
+            board: move(
+              pf,
+              pt,
+              board,
+              n[n.length - 1][["toUpperCase", "toLowerCase"][turn]]()
+            ),
+            move: returnMove
+              ? getMoveNotation(
+                  board,
+                  pf,
+                  pt,
+                  turn,
+                  n[n.length - 1][["toUpperCase", "toLowerCase"][turn]](),
+                  isValidMove,
+                  enpassant
+                )
+              : n,
+          };
         }
       }
 
@@ -440,19 +464,20 @@ function playChessNotation(
       // pawn pushes, done
       if (n.length === 2 && !isNaN(parseInt(n[1]))) {
         // console.log('pawn push');
-        const pl = (m) =>
-          pieceIsColor(board[index(r + 1 * [m, -m][turn], c)], turn) &&
-          board[index(r + 1 * [m, -m][turn], c)].toLowerCase() === "p"
-            ? index(r + 1 * [m, -m][turn], c)
+        const pl = (m) => {
+          const k = index(r + 1 * [m, -m][turn], c);
+          return pieceIsColor(board[k], turn) && board[k].toLowerCase() === "p"
+            ? k
             : null;
+        };
         const pf = pl(1) ?? pl(2);
 
-        if (pf) {
+        if (pf && board[pf].toLowerCase() === 'p') {
           const pi = (m) =>
             board[index(r, c + m)] ===
             "p"[["toUpperCase", "toLowerCase"][1 - turn]]();
           if (isValidMove(pf, pt, board, turn)) {
-            if (pl(2) && (pi(-1) || pi(1))) {
+            if (pl(2)) {
               // console.log("enpassant:", pt, toChessNotation(pt));
               updateData && updateData(pt);
             }
@@ -460,7 +485,20 @@ function playChessNotation(
               return true;
             }
 
-            return move(pf, pt, board);
+            return {
+              board: move(pf, pt, board),
+              move: returnMove
+                ? getMoveNotation(
+                    board,
+                    pf,
+                    pt,
+                    turn,
+                    null,
+                    isValidMove,
+                    enpassant
+                  )
+                : n,
+            };
           }
         }
       }
@@ -472,8 +510,14 @@ function playChessNotation(
         if (enpassant) {
           // debugger;
         }
-        if (pf == null || !isValidMove(pf, pt, board, turn, enpassant)) {
-          return n[0] === "b" ? null : false;
+        if (
+          pf == null ||
+          isNaN(pf) ||
+          !isValidMove(pf, pt, board, turn, enpassant)||board[pf].toLowerCase() !== 'p'
+        ) {
+          return n[0] === "b" // may be a bishop
+            ? null
+            : false;
         }
 
         if (
@@ -489,7 +533,12 @@ function playChessNotation(
         }
 
         // console.log(toChessNotation(pf));
-        return move(pf, pt, board);
+        return {
+          board: move(pf, pt, board),
+          move: returnMove
+            ? getMoveNotation(board, pf, pt, turn, null, isValidMove, enpassant)
+            : n,
+        };
       }
     },
     // piece moves
@@ -521,7 +570,7 @@ function playChessNotation(
       n = n.replace("x", ""); // we dont need to know whether its a capture
       // debugger;
       //piece moves eg Nc3, Raa1,Bd4c5
-      if ("kqrbn".includes(n[0].toLowerCase())) {
+      if ("kqrbn".includes(n[0].toLowerCase()) && n.length > 2) {
         const p = n[0][["toUpperCase", "toLowerCase"][turn]]();
         let pf = null;
         const pt = fromChessNotation(n.substring(n.length - 2));
@@ -542,8 +591,10 @@ function playChessNotation(
             "abcdefgh".includes(n[1]) ? "abcdefgh".indexOf(n[1]) : null
           );
         } else if (n.length === 3) {
+          // debugger;
           pf = getMovable(p, pt);
         }
+        // debugger;
         if (pf === null || !isValidMove(pf, pt, board, turn)) {
           return false;
         }
@@ -572,17 +623,26 @@ function playChessNotation(
         //     getMoveNotation(board, pf, pt, turn, null, isValidMove, enpassant)
         // );
 
-        return move(pf, pt, board);
+        return {
+          board: move(pf, pt, board),
+          move: returnMove
+            ? getMoveNotation(board, pf, pt, turn, null, isValidMove, enpassant)
+            : n,
+        };
       }
     },
   ];
   for (let i = 0; i < ms.length; i++) {
-    const m = ms[i]();
-    if (m || m === false) {
-      if (Array.isArray(m)) {
-        outcome(m);
+    try {
+      const m = ms[i]();
+      if (m || m === false) {
+        if (m && m.board && Array.isArray(m.board)) {
+          outcome(m.board);
+        }
+        return m;
       }
-      return m;
+    } catch (err) {
+      return false;
     }
   }
   return false;
@@ -591,30 +651,109 @@ function playChessNotation(
 function generateLegalMoves(board, turn, enpassant, castled) {
   const moves = [];
   for (let i = 0; i < 64; i++) {
+    const pf = board[i];
+    if (pieceIsColor(board[i], turn) && board[i].toLowerCase() === "k") {
+      // debugger;
+    }
     for (let j = 0; j < 64; j++) {
       if (
-        isValidMove(i, j, board, turn, enpassant, castled) &&
-        !(board[i].toLowerCase() === "p" && (j < 8 || j > 55))
+        pieceIsColor(board[i], turn) &&
+        !(
+          board[i].toLowerCase() === "p" &&
+          ((j < 8 && pieceIsColor(pf, 0)) || (j > 55 && pieceIsColor(pf, 1)))
+        ) &&
+        isValidMove(i, j, board, turn, enpassant, castled)
       ) {
         moves.push(getMoveNotation(board, i, j, turn, null, isValidMove));
       }
+      // if (pieceIsColor(board[i], turn) && board[i].toLowerCase() === "k") {
+      //   debugger;
+      // }
     }
   }
   //promotions
   for (let i = 0; i < 64; i++) {
     const p = board[i];
     const [fr, fc] = getPiecePos(i);
-    if (p.toLowerCase() === "p" && ((fr === 6&&pieceIsColor(p,1)) || (fr === 1&&pieceIsColor(p,0)))) {
+    if (
+      p.toLowerCase() === "p" &&
+      ((fr === 6 && pieceIsColor(p, 1)) || (fr === 1 && pieceIsColor(p, 0)))
+    ) {
       for (let c = -1; c < 2; c++) {
-        const t = index(fr + 1 * [-1, 1][turn], fc+c)
+        const t = index(fr + 1 * [-1, 1][turn], fc + c);
         if (isValidMove(i, t, board, turn)) {
-          
-          moves.push(...[...'QRBN'].map(p => getMoveNotation(board,i,t,turn,p)))
+          moves.push(
+            ...[..."QRBN"].map((p) => getMoveNotation(board, i, t, turn, p))
+          );
         }
       }
     }
   }
   return moves;
+}
+
+function isRearranged(arr1, arr2) {
+  arr1 = [...arr1];
+  arr2 = [...arr2];
+  return (
+    arr1.every((v) => arr2.includes(v)) &&
+    arr2.every((v) => arr1.includes(v)) &&
+    arr1.length === arr2.length
+  );
+}
+
+function isDrawByInsufficientMaterial(board) {
+  const pieces = board.filter((p) => p.trim() !== "");
+  if (pieces.length === 2) {
+    return true;
+  }
+  const nonKingPieces = pieces.filter((p) => p.toLowerCase() !== "k");
+  if (
+    isRearranged(nonKingPieces, "bB") || // 2 opposing bishops
+    isRearranged(nonKingPieces, "nN") || // 2 opposing knights
+    isRearranged(nonKingPieces, "nB") || // black knight and white bishop
+    isRearranged(nonKingPieces, "Nb") || // white knight and black bishop
+    isRearranged(nonKingPieces, "b") || // a black bishop
+    isRearranged(nonKingPieces, "B") || // a white bishop
+    isRearranged(nonKingPieces, "n") || // a black knight
+    isRearranged(nonKingPieces, "N") // a white knight
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function toFen(board, turn, enpassant, castle, halfClockMoves, fullMoves) {
+  let f = "";
+  let sp = 0;
+  board.forEach((p, i) => {
+    if (p.trim() !== "") {
+      f += p;
+    } else {
+      sp++;
+      if (board[i + 1].trim() !== "") {
+        f += sp;
+      }
+      sp = 0;
+    }
+    if (i % 8 === 0 && i < 63) {
+      f += "/";
+    }
+  });
+  // enpassant&&enpassant>=0&&(f[enpassant] = '-')
+  const c = (i) =>
+    (castle[i] === 0
+      ? ""
+      : castle[i] === 1
+      ? "Q"
+      : castle[i] === 2
+      ? "K"
+      : "QK")[["toUpperCase", "toLowerCase"][i]]();
+  return `${f} ${turn === 0 ? "w" : "b"} ${
+    c(0) + c(1) === "" ? "-" : c(0) + c(1)
+  } ${
+    enpassant && enpassant >= 0 ? toChessNotation(enpassant) : "-"
+  } ${fullMoves} ${halfClockMoves}`;
 }
 
 // const b = playChessNotation("e4", 0, starting);
@@ -644,6 +783,7 @@ export {
   index,
   isCheck,
   isCheckMate,
+  isDrawByInsufficientMaterial,
   isValidMove,
   move,
   pieceIsColor,

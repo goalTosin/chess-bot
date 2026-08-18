@@ -1,0 +1,102 @@
+*{
+  box-sizing: border-box;
+  touch-action: none;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  width: 30em;
+  background-color: black;
+  gap: 1px;
+  border: 1px solid black;
+}
+
+.tile,.tile>* {
+  aspect-ratio: 1/1;
+  width: 100%;
+  height: 100%;
+
+  touch-action: none;
+}
+.drag.info {
+  position: relative;
+  left: var(--x);
+  top: var(--y);
+}
+.tile>* {
+
+  background-size: cover;
+  grid-column: 1;
+  grid-row: 1;
+}
+.drop.toMove,.drop.toMove:hover {
+  background-color: rgba(0, 0, 255, 0.171);
+}
+.tile:hover>.drop {
+  border: 2px solid rgba(255, 255, 0, 0.212);
+}
+.tile:hover>.info {
+  transform: scale(1.1);
+}
+.tile:active>.info {
+  transform: scale(0.95);
+}
+.tile {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: white;
+  background-size: cover;
+  display: grid;
+}
+
+.info {
+}
+
+.tile.dark {
+  background-color: #d38c46;
+}
+
+
+.wp {
+  background-image: url(imgs/wp.png);
+}
+.wn {
+  background-image: url(imgs/wn.png);
+}
+.wb {
+  background-image: url(imgs/wb.png);
+}
+.wr {
+  background-image: url(imgs/wr.png);
+}
+.wq {
+  background-image: url(imgs/wq.png);
+}
+
+.wk {
+  background-image: url(imgs/wk.png);
+}
+
+
+.bp {
+  background-image: url(imgs/bp.png);
+}
+.bn {
+  background-image: url(imgs/bn.png);
+}
+.bb {
+  background-image: url(imgs/bb.png);
+}
+.br {
+  background-image: url(imgs/br.png);
+}
+.bq {
+  background-image: url(imgs/bq.png);
+}
+
+.bk {
+  background-image: url(imgs/bk.png);
+}
+

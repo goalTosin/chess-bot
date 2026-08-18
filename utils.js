@@ -2,4 +2,8 @@ function randItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
-export {randItem}
+function wrap(f,v) {
+  return f(v)
+}
+
+export {randItem,wrap}

@@ -2,6 +2,8 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { ChessGame } from "./game.js";
 import readline from "readline";
 import { fromChessNotation } from "./chess.js";
+import { randItem } from "./utils.js";
+import { stdin, stdout } from "process";
 
 function getInput() {
   return readline.createInterface({
@@ -109,6 +111,9 @@ async function welcome() {
     { "Play Self": selfPlay },
     { "Over the board": overTheBoard },
     { "Edit Board": editPos },
+    { "Play Rando": rando },
+    { "Rando vs Rando": randoSelf },
+    { "Analysis": analysis },
   ];
   actions.forEach((ac, i) => {
     console.log("    " + (i + 1) + ". " + Object.keys(ac)[0]);
@@ -162,7 +167,7 @@ async function overTheBoard() {
     //   );
     //   console.log("Game saved");
     // }
-    console.log("\nMoves played: ", game.moves.join(" "));
+    console.log("\nMoves played:", game.moves.join(" "));
   });
 
   let illegal = false;
@@ -170,7 +175,7 @@ async function overTheBoard() {
   while (game.status.outcome === null || !next) {
     console.log();
     console.log(game.asciiRender(2));
-    console.log();
+    console.log("\nLegal Moves: " + game.generateLegalMoves().join(", "));
     if (game.status.outcome !== null) {
       next = true;
       break;
@@ -228,48 +233,53 @@ async function selfPlay() {
   process.addListener("exit", () => {
     save();
   });
+  // process.stdin.addListener('keypress')
 
+  let b = false;
   // console.log(unfinishedGames);
   while (unfinishedGames.length > 0) {
     let unfinished = Math.floor(Math.random() * unfinishedGames.length);
-    console.log("\x1b[1mGame #" + (unfinished + 1 + "")+'\x1b[0m');
+    console.log("\x1b[1m#" + (unfinished + 1 + "") + "\x1b[0m");
     const game = ChessGame.fromMoves(unfinishedGames[unfinished].g.split(" "));
 
     let illegal = false;
-    let first = true;
-    let b = false;
+    let next = false;
     // game.asciiRender(2)
-    console.log(
-      `\n${game.moves.join(' ')}\n\n${
-        game.turn === 1 ? "White" : "Black"
-      } played: ${game.moves.at(-1)}`
-    );
-    while (illegal || first || b) {
-      first = false;
+
+    while (!next) {
+
+      console.log(`\n${game.moves.join(" ")}\n`);
+      if (b) {
+        console.log(`\n${game.asciiRender(2)}\n`);
+      }
       const move = await askQuestion(
         `${illegal ? '"' + illegal + '" Illegal. ' : ""}${
           game.turn === 0 ? "White" : "Black"
-        } to move${b?'':' (b to show board)'}: `
+        } to move (b to ${b ? "hide" : "show"} board): `
       );
-      b = false
-      if (move === 'b') {
-        b=true
-        console.log(`\n${game.asciiRender(2)}\n`);
+
+      // b = false;
+      if (move === "b") {
+        b = !b;
+      } else if (move === ''){
+        next = true
       } else {
-      if (game.isValidMove(move)) {
-        game.playMove(move);
-        unfinishedGames[unfinished].g = game.moves.join(" ");
-        illegal = false;
-        a++;
-        if (a % 5 === 0) {
-          save();
+        if (game.isValidMove(move)) {
+          game.playMove(move, true);
+          // console.log(unfinishedGames);
+          unfinishedGames[unfinished].g = game.moves.join(" ");
+          // console.log(unfinishedGames);
+          illegal = false;
+          a++;
+          next = true
+          if (a % 5 === 0) {
+            save();
+          }
+        } else {
+          illegal = move;
         }
-      } else {
-        illegal = move;
       }
       console.clear();
-
-      }
     }
     if (game.status.outcome !== null) {
       gamesNotation[unfinishedGames[unfinished].i] = game.toCompact();
@@ -278,7 +288,7 @@ async function selfPlay() {
         game.outcome === 0.5
           ? "Draw by " + game.status.reason ?? "an unknown reason"
           : `${game.status.outcome ? "Black" : "White"} wins by ${
-              game.status.reason
+              game.status.reason ?? "an unknown reason"
             }`
       );
       unfinishedGames.splice(unfinishedGames[unfinished].i, 1);
@@ -384,6 +394,12 @@ async function editPos() {
 
 async function rando() {
   const game = new ChessGame();
+
+  process.addListener("exit", () => {
+    console.log("\nMoves played:", game.moves.join(" "));
+  });
+  let blind = false;
+
   const ans = await askQuestion("Play as [W]hite or [B]lack: ", (v) =>
     "wb ".includes(v.toLowerCase())
   );
@@ -391,14 +407,135 @@ async function rando() {
     ans.toLowerCase() === "w" ? 0 : ans.toLowerCase() === "b" ? 1 : 0;
 
   let illegal = false;
-  let next = false;
-  while (game.status.outcome === null || !next) {
-    if (side === game.turn) {
-      game.playMove(randItem(getAllMoves()));
+  while (game.status.outcome === null) {
+    if (side === 1 - game.turn) {
+      // console.log("Moves to play: " + game.generateLegalMoves().join(", "));
+      const m = randItem(game.generateLegalMoves());
+      console.log("\nComputer playes: " + m);
+      game.playMove(m);
     }
     console.log();
-    console.log(game.asciiRender(2));
+    if (!blind) {
+      console.log(game.asciiRender(2));
+      console.log();
+    }
+    if (game.status.outcome !== null) {
+      break;
+    }
+    const move = await askQuestion(
+      `${illegal ? '"' + illegal + '" Illegal. ' : ""}${
+        game.turn === 0 ? "White" : "Black"
+      } to move: `
+    );
+    if (move.trim().toLowerCase() === "resign") {
+      game.setStatus(1 - game.turn, "resignation");
+      continue;
+    }
+    if (move === "b") {
+      blind = !blind;
+      continue;
+    }
+    if (game.isValidMove(move)) {
+      game.playMove(move);
+      illegal = false;
+    } else {
+      illegal = move;
+    }
+  }
+  console.log(
+    game.status.outcome === 0.5
+      ? `Draw by ${game.status.reason}`
+      : `${
+          game.status.outcome
+            ? side
+              ? "You"
+              : "Black"
+            : side
+            ? "You"
+            : "White"
+        } won by ${game.status.reason}`
+  );
+  console.log();
+  console.log(game.asciiRender(side));
+  console.log();
+}
+
+async function wait(s = 1) {
+  return new Promise((r) => {
+    setTimeout(r, s);
+  });
+}
+
+async function randoSelf() {
+  const game = new ChessGame();
+
+  process.addListener("SIGINT", () => {
+    process.exit(1);
+  });
+  process.addListener("exit", () => {
+    console.log("\nMoves played:", game.moves.join(" "));
+  });
+
+  while (game.status.outcome === null) {
+    // console.log("Moves to play: " + game.generateLegalMoves().join(", "));
+    const m = randItem(game.generateLegalMoves());
+    // console.log("\nComputer playes: " + m);
+    game.playMove(m);
+    // console.log(game.asciiRender(0));
+
+    // await wait();
+  }
+  console.log(
+    game.status.outcome === 0.5
+      ? `Draw by ${game.status.reason}`
+      : `${game.status.outcome ? "Black" : "White"} won by ${
+          game.status.reason
+        }`
+  );
+  console.log();
+  console.log(
+    game.asciiRender(game.status.outcome === 0.5 ? 0 : game.status.outcome)
+  );
+  console.log();
+}
+
+async function analysis() {
+  const st = await askQuestion(
+    "Starting position (enter for standard): ",
+    (v) => {
+      if (v === "") {
+        return true;
+      }
+      for (let i = 0; i < v.length; i++) {
+        if (!v.match(/[pnbrqkPNBRQK ]+/g)) {
+          console.log("@" + v[i] + "@");
+          return false;
+        }
+      }
+      return true;
+    }
+  );
+  const mo = await askQuestion("Moves played (enter for none): ");
+
+  const game = new ChessGame(st.trim() === "" ? null : st.padEnd(64, " "));
+  mo !== "" && game.playMoves(mo.trim().split(" "));
+  process.addListener("exit", () => {
+    console.log("\nMoves played: ", game.moves.join(" "));
+  });
+  process.stdin.addListener("keypress", (e, b) => {
+    if ((b.name === "left" || b.name === "right") && stdout.c) {
+      if (condition) {
+      }
+      console.log(e, b);
+    }
+  });
+
+  let illegal = false;
+  let next = false;
+  while (game.status.outcome === null || !next) {
     console.log();
+    console.log(game.asciiRender(2));
+    console.log("\nLegal Moves: " + game.generateLegalMoves().join(", "));
     if (game.status.outcome !== null) {
       next = true;
       break;
